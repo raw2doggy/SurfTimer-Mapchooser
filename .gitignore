@@ -4,3 +4,44 @@
 *.dat
 *.smx
 .vscode
+
+# C# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio files
+.vs/
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+.nuget/
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# Compiled C# assemblies
+*.dll
+*.pdb
+
+# Config files with sensitive data
+**/config_local.json

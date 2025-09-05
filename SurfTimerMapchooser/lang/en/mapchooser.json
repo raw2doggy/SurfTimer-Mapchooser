@@ -1,0 +1,29 @@
+{
+  "mapchooser": {
+    "max_nominations": "{0} The maximum allowed nominations has been reached.",
+    "map_already_in_vote": "{0} Map '{1}' already in the nominations list.",
+    "map_inserted": "{0} Map '{1}' added to the nominations list.",
+    "map_already_nominated": "{0} The map you chose has already been nominated.",
+    "map_nominated": "{0} {1} has nominated {2}.",
+    "map_nomination_changed": "{0} {1} has changed their nomination to {2}.",
+    "nominate_title": "Nominate Menu",
+    "nominate_tier_title": "Nominate Menu\nTier {0} Maps",
+    "map_vote_started": "{0} Map vote started! Type !vote to participate.",
+    "map_vote_ended": "{0} Vote ended! Winner: {1} ({2} votes)",
+    "map_extended": "{0} Map extended by {1} minutes!",
+    "changing_map": "{0} Changing to {1} in 5 seconds...",
+    "no_votes_received": "{0} No votes received. Map will not change.",
+    "next_map": "{0} Next map: {1}",
+    "voted_for": "{0} You voted for: {1}",
+    "map_not_found": "{0} Map '{1}' not found.",
+    "map_excluded": "{0} Map '{1}' is excluded from nominations."
+  },
+  "rockthevote": {
+    "rtv_needed": "{0} RTV: {1} votes needed",
+    "rtv_voted": "{0} {1} wants to rock the vote! ({2}/{3} votes needed)",
+    "rtv_already_voted": "{0} You have already voted to rock the vote.",
+    "rtv_minimum_players": "{0} At least {1} players must be connected to start a vote.",
+    "rtv_started": "{0} Vote has started due to Rock the Vote!",
+    "rtv_disabled": "{0} Rock the Vote is currently disabled."
+  }
+}
