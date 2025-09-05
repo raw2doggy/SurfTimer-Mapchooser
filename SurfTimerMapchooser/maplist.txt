@@ -1,0 +1,14 @@
+// Example maplist for SurfTimer MapChooser
+// Lines starting with // are comments and will be ignored
+// List one map per line
+
+surf_beginner
+surf_kitsune
+surf_ski_2
+surf_mesa
+surf_utopia_v3
+surf_greatriver_xdre4m
+surf_rookie
+surf_fruits
+surf_Egypt
+surf_amplitude

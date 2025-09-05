@@ -1,21 +1,21 @@
 # SurfTimer MapChooser for CS2 with CounterStrikeSharp
 
-This is a CounterStrikeSharp (CS2) port of the popular SurfTimer MapChooser plugins originally designed for SourceMod. This plugin collection provides map voting, nominations, rock-the-vote, and vote extend functionality for CS2 SurfTimer servers.
+This is a CounterStrikeSharp (CS2) plugin that provides map voting, nominations, rock-the-vote, and map extension functionality for CS2 servers. **Now updated to work with SharpTimer!**
 
 ## ⚡ Quick Start
 
-This repository now contains **BOTH** versions:
-- **SourceMod version** (in `addons/sourcemod/` - original)
-- **CounterStrikeSharp version** (in `SurfTimerMapchooser/` - new CS2 port)
+This repository contains a modern mapchooser plugin designed for **SharpTimer integration**.
 
-## 🎯 CS2 CounterStrikeSharp Version
+## 🎯 SharpTimer Integration
 
 ### Features
 
 - **MapChooser**: Automated map voting at the end of rounds/time limits
-- **Nominations**: Players can nominate maps for the next vote with tier-based menus
-- **Rock the Vote (RTV)**: Players can vote to start a map vote early
-- **Vote Extend**: Players can vote to extend the current map
+- **Nominations**: Players can nominate maps with `!nominate` or `!nm`
+- **Rock the Vote (RTV)**: Players can vote to start a map vote early with `!rtv`
+- **Map Extensions**: Option to extend the current map
+- **SharpTimer Database Integration**: Loads maps from SharpTimer's database
+- **Fallback System**: Uses maplist.txt if database unavailable
 
 ### Requirements
 
