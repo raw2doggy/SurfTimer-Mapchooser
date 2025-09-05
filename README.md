@@ -1,34 +1,158 @@
-# SurfTimer - Map Chooser, Nominations, and RTV
+# SurfTimer MapChooser for CS2 with CounterStrikeSharp
 
-## Introduction
+This is a CounterStrikeSharp (CS2) port of the popular SurfTimer MapChooser plugins originally designed for SourceMod. This plugin collection provides map voting, nominations, rock-the-vote, and vote extend functionality for CS2 SurfTimer servers.
 
-This is an edit of the default SourceMod mapchooser, nominations, and rtv plugins. It provides functionality for SurfTimer or its forks to display relevant information and provide further functionality in the map voting and nomination processes.
+## ⚡ Quick Start
 
-Pull requests, issues, and suggestions are encouraged - feel absolutely free to contribute! 😄
+This repository now contains **BOTH** versions:
+- **SourceMod version** (in `addons/sourcemod/` - original)
+- **CounterStrikeSharp version** (in `SurfTimerMapchooser/` - new CS2 port)
 
-## Previews:
+## 🎯 CS2 CounterStrikeSharp Version
 
-Preview of Nomination Menu:
+### Features
 
-![Preview of Nomination Menu](https://i.rebooti.ng/f/zjybx.png)
+- **MapChooser**: Automated map voting at the end of rounds/time limits
+- **Nominations**: Players can nominate maps for the next vote with tier-based menus
+- **Rock the Vote (RTV)**: Players can vote to start a map vote early
+- **Vote Extend**: Players can vote to extend the current map
 
-## Requirements
+### Requirements
 
-* [SurfTimer](https://github.com/surftimer/Surftimer-Official)
-* Sourcemod 1.11 (Please use the latest stable version!)
-* A MySQL Database (Supported: MySQL 5.7, MySQL 8+, MariaDB)
+- **CS2 Dedicated Server**
+- **CounterStrikeSharp v263+** ([Download](https://github.com/roflmuffin/CounterStrikeSharp))
+- **SurfTimer for CS2** (when available)
+- **MySQL Database** (MySQL 5.7+, MySQL 8+, or MariaDB)
+- **.NET 8.0 Runtime**
 
-**Compilation Requirements (Includes):**
+### Installation
 
-* [SurfTimer](https://github.com/surftimer/Surftimer-Official/tree/master/addons/sourcemod/scripting/include)
-* [Sourcemod 1.11](https://www.sourcemod.net/downloads.php?branch=stable)
-* [AutoExecConfig](https://github.com/Impact123/AutoExecConfig)
-* [ColorLib](https://github.com/c0rp3n/colorlib-sm)
+1. **Install CounterStrikeSharp** on your CS2 server
+2. **Download/Build the Plugin**:
+   ```bash
+   # Clone this repository
+   git clone https://github.com/raw2doggy/SurfTimer-Mapchooser.git
+   cd SurfTimer-Mapchooser
+   
+   # Build the CS2 version
+   dotnet build SurfTimerMapchooser.sln --configuration Release
+   ```
 
-## Installation
+3. **Install Plugin**:
+   ```bash
+   # Copy to your CS2 server
+   cp -r SurfTimerMapchooser/bin/Release/* /path/to/cs2/game/csgo/addons/counterstrikesharp/plugins/SurfTimerMapchooser/
+   ```
 
-* Please make sure any other Map Chooser, Nominations, and RTV plugins are disabled!
-* Download the [latest release](https://github.com/1zc/Surftimer-Mapchooser/releases). (It will be a ZIP file named after the release version)
-* Extract the release ZIP file to your server's `csgo` folder, and start your server to generate the required config files.
-* Set `sm_server_tier` in `csgo/cfg/sourcemod/st-mapchooser.cfg` to the tier of maps you want appearing the nominate list. Example, for a tier 1-3 server, set it to `sm_server_tier 1.3`, a tier 1 only server would be `sm_server_tier 1.0` and if you want all tiers `sm_server_tier 0`
-* Make sure the maps you want available on the server are listed in `csgo/mapcycle.txt`!
+4. **Configure**:
+   - Edit `config.json` with your database credentials
+   - Set server tier preferences
+   - Configure voting options
+
+5. **Restart** your CS2 server
+
+### Configuration Example
+
+```json
+{
+  "DatabaseHost": "localhost",
+  "DatabaseName": "surftimer",
+  "DatabaseUser": "surftimer",
+  "DatabasePassword": "password",
+  "DatabasePort": 3306,
+  "ServerTier": 1,
+  "ServerTierMax": 3,
+  "StartTime": 10,
+  "IncludeMaps": 5,
+  "Extend": true,
+  "VoteDuration": 30,
+  "ChatPrefix": "[MapChooser]"
+}
+```
+
+### Commands (CS2 Version)
+
+- `!nominate [mapname]` - Nominate a map
+- `!rtv` - Rock the vote  
+- `!ve` or `!voteextend` - Vote to extend current map
+- `!nextmap` - Show next map
+
+## 📁 SourceMod Version (Legacy)
+
+The original SourceMod plugins are still available in the `addons/sourcemod/` directory for CS:GO servers.
+
+### Requirements (SourceMod)
+- [SurfTimer](https://github.com/surftimer/Surftimer-Official)
+- SourceMod 1.11+
+- MySQL Database
+
+### Installation (SourceMod)
+See the original README.md for SourceMod installation instructions.
+
+## 🔧 Development
+
+### Building from Source
+
+```bash
+# Prerequisites: .NET 8.0 SDK
+dotnet build SurfTimerMapchooser.sln --configuration Release
+```
+
+### Project Structure
+
+```
+SurfTimerMapchooser/
+├── SurfTimerMapchooser.cs    # Main mapchooser functionality
+├── Nominations.cs            # Map nomination system  
+├── RockTheVote.cs           # RTV functionality
+├── VoteExtend.cs            # Vote extend functionality
+├── config.json              # Configuration file
+└── lang/                    # Language files
+    └── en/
+        └── mapchooser.json
+```
+
+## 🚀 Key Improvements in CS2 Version
+
+### Technical Improvements
+- **Async Database Operations**: Better performance with non-blocking MySQL queries
+- **Modern C# Features**: Leverages .NET 8.0 capabilities
+- **JSON Configuration**: More flexible and readable than ConVars
+- **Modular Design**: Separate plugins for each feature
+- **Type Safety**: Strong typing with C# vs SourcePawn
+
+### Feature Parity
+- ✅ Map voting with tier filtering
+- ✅ Player-based nominations
+- ✅ Rock the vote functionality
+- ✅ Vote extend capability
+- ✅ Database integration with SurfTimer
+- ✅ Player requirements (points/rank)
+- ✅ Tiered nomination menus
+
+### Differences from SourceMod
+- Commands use CSS-style `css_` prefix internally
+- JSON configuration instead of ConVar-based config
+- ChatMenu system instead of SourceMod panels
+- Event-driven architecture with CounterStrikeSharp
+
+## 🤝 Contributing
+
+This is a community-driven port. Contributions welcome!
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test on a CS2 server
+5. Submit a pull request
+
+## 📄 License
+
+Maintains GPL v3 license from original SourceMod plugins.
+
+## 🙏 Credits
+
+- **Original SourceMod Plugins**: AlliedModders LLC & SurfTimer Contributors  
+- **CS2 Port**: Community contributors
+- **CounterStrikeSharp**: roflmuffin and contributors
+- **SurfTimer**: SurfTimer development team

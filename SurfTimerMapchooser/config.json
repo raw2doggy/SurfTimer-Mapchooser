@@ -1,0 +1,20 @@
+{
+  "DatabaseHost": "localhost",
+  "DatabaseName": "surftimer",
+  "DatabaseUser": "surftimer", 
+  "DatabasePassword": "password",
+  "DatabasePort": 3306,
+  "ServerTier": 0,
+  "ServerTierMax": 0,
+  "StartTime": 10,
+  "IncludeMaps": 5,
+  "ExcludeMaps": 3,
+  "Extend": true,
+  "MaxExtends": 2,
+  "ExtendTimeStep": 15,
+  "VoteDuration": 30,
+  "PointsRequirement": 0,
+  "RankRequirement": 0,
+  "VipOverwriteRequirements": true,
+  "ChatPrefix": "[MapChooser]"
+}
