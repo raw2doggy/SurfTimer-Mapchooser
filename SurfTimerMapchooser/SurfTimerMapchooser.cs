@@ -8,6 +8,7 @@ using CounterStrikeSharp.API.Modules.Menu;
 using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.Utils;
 using MySqlConnector;
+using Dapper;
 using System.Text.Json;
 
 namespace SurfTimerMapchooser;
@@ -15,14 +16,13 @@ namespace SurfTimerMapchooser;
 public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
 {
     public override string ModuleName => "SurfTimer MapChooser";
-    public override string ModuleVersion => "2.0.3";
-    public override string ModuleAuthor => "AlliedModders LLC & SurfTimer Contributors";
-    public override string ModuleDescription => "Automated Map Voting for CS2";
+    public override string ModuleVersion => "3.0.0";
+    public override string ModuleAuthor => "AlliedModders LLC & SurfTimer Contributors & SharpTimer Contributors";
+    public override string ModuleDescription => "Automated Map Voting for CS2 with SharpTimer Integration";
 
     public MapchooserConfig Config { get; set; } = new();
     
     private readonly List<string> _mapList = new();
-    private readonly List<int> _mapTierList = new();
     private readonly List<string> _nominatedMaps = new();
     private readonly List<int> _nominatedBy = new();
     private readonly List<string> _excludedMaps = new();
@@ -34,11 +34,10 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
     private string? _connectionString;
     
     private CounterStrikeSharp.API.Modules.Timers.Timer? _voteTimer;
-    private CounterStrikeSharp.API.Modules.Timers.Timer? _retryTimer;
     
     // Map vote menu
     private ChatMenu? _voteMenu;
-    
+
     public override void Load(bool hotReload)
     {
         LoadConfig();
@@ -46,8 +45,10 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
         
         RegisterListener<Listeners.OnMapStart>(OnMapStart);
         RegisterListener<Listeners.OnMapEnd>(OnMapEnd);
+        RegisterListener<Listeners.OnClientDisconnect>(OnClientDisconnect);
         
         AddCommand("css_nominate", "Nominate a map", OnNominateCommand);
+        AddCommand("css_nm", "Nominate a map (alias)", OnNominateCommand);
         AddCommand("css_rtv", "Rock the vote", OnRtvCommand);
         AddCommand("css_nextmap", "Show next map", OnNextMapCommand);
         
@@ -108,82 +109,80 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
     private async void LoadMapList()
     {
         if (string.IsNullOrEmpty(_connectionString))
+        {
+            LoadMapListFromFile();
             return;
+        }
 
         try
         {
             using var connection = new MySqlConnection(_connectionString);
             await connection.OpenAsync();
 
-            string query;
-            if (Config.ServerTier > 0)
-            {
-                // Load specific tier or tier range
-                if (Config.ServerTierMax > Config.ServerTier)
-                {
-                    query = "SELECT ck_zones.mapname, tier, count(ck_zones.zonetype = 3), bonus FROM `ck_zones` " +
-                           "INNER JOIN ck_maptier on ck_zones.mapname = ck_maptier.mapname " +
-                           "LEFT JOIN ( SELECT mapname as map_2, MAX(ck_zones.zonegroup) as bonus FROM ck_zones GROUP BY mapname ) as a on ck_zones.mapname = a.map_2 " +
-                           "WHERE (zonegroup = 0 AND zonetype = 1 or zonetype = 3 or zonetype = 5) AND tier >= @tierMin AND tier <= @tierMax " +
-                           "GROUP BY mapname, tier, bonus ORDER BY mapname ASC";
-                }
-                else
-                {
-                    query = "SELECT ck_zones.mapname, tier, count(ck_zones.zonetype = 3), bonus FROM `ck_zones` " +
-                           "INNER JOIN ck_maptier on ck_zones.mapname = ck_maptier.mapname " +
-                           "LEFT JOIN ( SELECT mapname as map_2, MAX(ck_zones.zonegroup) as bonus FROM ck_zones GROUP BY mapname ) as a on ck_zones.mapname = a.map_2 " +
-                           "WHERE (zonegroup = 0 AND zonetype = 1 or zonetype = 3 or zonetype = 5) AND tier = @tier " +
-                           "GROUP BY mapname, tier, bonus ORDER BY mapname ASC";
-                }
-            }
-            else
-            {
-                // Load all tiers
-                query = "SELECT ck_zones.mapname, tier, count(ck_zones.zonetype = 3), bonus FROM `ck_zones` " +
-                       "INNER JOIN ck_maptier on ck_zones.mapname = ck_maptier.mapname " +
-                       "LEFT JOIN ( SELECT mapname as map_2, MAX(ck_zones.zonegroup) as bonus FROM ck_zones GROUP BY mapname ) as a on ck_zones.mapname = a.map_2 " +
-                       "WHERE (zonegroup = 0 AND zonetype = 1 or zonetype = 3 or zonetype = 5) " +
-                       "GROUP BY mapname, tier, bonus ORDER BY mapname ASC";
-            }
+            // Query SharpTimer's PlayerRecords table to get available maps
+            string query = @"
+                SELECT DISTINCT MapName 
+                FROM PlayerRecords 
+                WHERE MapName NOT LIKE '%bonus%' 
+                ORDER BY MapName ASC";
 
-            using var command = new MySqlCommand(query, connection);
-            
-            if (Config.ServerTier > 0)
-            {
-                if (Config.ServerTierMax > Config.ServerTier)
-                {
-                    command.Parameters.AddWithValue("@tierMin", Config.ServerTier);
-                    command.Parameters.AddWithValue("@tierMax", Config.ServerTierMax);
-                }
-                else
-                {
-                    command.Parameters.AddWithValue("@tier", Config.ServerTier);
-                }
-            }
-
-            using var reader = await command.ExecuteReaderAsync();
+            var maps = await connection.QueryAsync<string>(query);
             
             _mapList.Clear();
-            _mapTierList.Clear();
             
-            while (await reader.ReadAsync())
+            foreach (var mapName in maps)
             {
-                var mapName = reader.GetString("mapname");
-                var tier = reader.GetInt32("tier");
-                
                 // Check if map exists in mapcycle or on server
                 if (Server.IsMapValid(mapName))
                 {
                     _mapList.Add(mapName);
-                    _mapTierList.Add(tier);
                 }
             }
             
-            Server.PrintToConsole($"[SurfTimer MapChooser] Loaded {_mapList.Count} maps from database");
+            // If no maps found in database, fall back to file-based approach
+            if (_mapList.Count == 0)
+            {
+                LoadMapListFromFile();
+            }
+            else
+            {
+                Server.PrintToConsole($"[SurfTimer MapChooser] Loaded {_mapList.Count} maps from SharpTimer database");
+            }
         }
         catch (Exception ex)
         {
-            Server.PrintToConsole($"[SurfTimer MapChooser] Error loading map list: {ex.Message}");
+            Server.PrintToConsole($"[SurfTimer MapChooser] Error loading map list from database: {ex.Message}");
+            LoadMapListFromFile();
+        }
+    }
+
+    private void LoadMapListFromFile()
+    {
+        try
+        {
+            var mapListPath = Path.Combine(ModuleDirectory, "maplist.txt");
+            if (File.Exists(mapListPath))
+            {
+                var maps = File.ReadAllLines(mapListPath)
+                    .Where(line => !string.IsNullOrWhiteSpace(line) && !line.StartsWith("//"))
+                    .Select(line => line.Trim())
+                    .Where(Server.IsMapValid);
+
+                _mapList.AddRange(maps);
+                Server.PrintToConsole($"[SurfTimer MapChooser] Loaded {_mapList.Count} maps from file");
+            }
+            else
+            {
+                // Create default maplist file
+                var defaultMaps = new[] { "surf_beginner", "surf_kitsune", "surf_ski_2" };
+                File.WriteAllLines(mapListPath, defaultMaps);
+                _mapList.AddRange(defaultMaps.Where(Server.IsMapValid));
+                Server.PrintToConsole("[SurfTimer MapChooser] Created default maplist.txt");
+            }
+        }
+        catch (Exception ex)
+        {
+            Server.PrintToConsole($"[SurfTimer MapChooser] Error loading maplist from file: {ex.Message}");
         }
     }
 
@@ -194,54 +193,7 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
         if (player == null || !player.IsValid || player.IsBot)
             return HookResult.Continue;
 
-        // Check player requirements async
-        _ = Task.Run(async () => await CheckPlayerRequirements(player));
-        
         return HookResult.Continue;
-    }
-
-    private async Task CheckPlayerRequirements(CCSPlayerController player)
-    {
-        if (string.IsNullOrEmpty(_connectionString) || !player.IsValid)
-            return;
-
-        try
-        {
-            var steamId = player.SteamID.ToString();
-            
-            using var connection = new MySqlConnection(_connectionString);
-            await connection.OpenAsync();
-
-            // Check player points
-            if (Config.PointsRequirement > 0)
-            {
-                var pointsQuery = "SELECT points FROM ck_playerrank WHERE steamid = @steamid AND style = 0";
-                using var pointsCommand = new MySqlCommand(pointsQuery, connection);
-                pointsCommand.Parameters.AddWithValue("@steamid", steamId);
-                
-                var pointsResult = await pointsCommand.ExecuteScalarAsync();
-                var points = pointsResult != null ? Convert.ToInt32(pointsResult) : 0;
-                
-                // Store player points check result (you'd implement this based on your needs)
-            }
-
-            // Check player rank
-            if (Config.RankRequirement > 0)
-            {
-                var rankQuery = "SELECT COUNT(*) FROM ck_playerrank WHERE style = 0 AND points >= (SELECT points FROM ck_playerrank WHERE steamid = @steamid AND style = 0)";
-                using var rankCommand = new MySqlCommand(rankQuery, connection);
-                rankCommand.Parameters.AddWithValue("@steamid", steamId);
-                
-                var rankResult = await rankCommand.ExecuteScalarAsync();
-                var rank = rankResult != null ? Convert.ToInt32(rankResult) : 0;
-                
-                // Store player rank check result (you'd implement this based on your needs)
-            }
-        }
-        catch (Exception ex)
-        {
-            Server.PrintToConsole($"[SurfTimer MapChooser] Error checking player requirements: {ex.Message}");
-        }
     }
 
     public void OnNominateCommand(CCSPlayerController? player, CommandInfo commandInfo)
@@ -271,10 +223,7 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
             if (_nominatedMaps.Contains(map) || _excludedMaps.Contains(map))
                 continue;
                 
-            var index = _mapList.IndexOf(map);
-            var tier = index >= 0 && index < _mapTierList.Count ? _mapTierList[index] : 0;
-            
-            menu.AddMenuOption($"Tier {tier} - {map}", (controller, option) =>
+            menu.AddMenuOption(map, (controller, option) =>
             {
                 NominateMap(controller, map);
             });
@@ -285,21 +234,26 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
 
     private void NominateMap(CCSPlayerController player, string mapName)
     {
-        if (!_mapList.Contains(mapName))
+        // Find map with partial matching
+        var matchedMap = _mapList.FirstOrDefault(m => 
+            m.Equals(mapName, StringComparison.OrdinalIgnoreCase) ||
+            m.Contains(mapName, StringComparison.OrdinalIgnoreCase));
+
+        if (string.IsNullOrEmpty(matchedMap))
         {
             player.PrintToChat($"{Config.ChatPrefix} Map '{mapName}' not found.");
             return;
         }
 
-        if (_nominatedMaps.Contains(mapName))
+        if (_nominatedMaps.Contains(matchedMap))
         {
-            player.PrintToChat($"{Config.ChatPrefix} Map '{mapName}' already nominated.");
+            player.PrintToChat($"{Config.ChatPrefix} Map '{matchedMap}' already nominated.");
             return;
         }
 
-        if (_excludedMaps.Contains(mapName))
+        if (_excludedMaps.Contains(matchedMap))
         {
-            player.PrintToChat($"{Config.ChatPrefix} Map '{mapName}' is excluded from nominations.");
+            player.PrintToChat($"{Config.ChatPrefix} Map '{matchedMap}' is excluded from nominations.");
             return;
         }
 
@@ -311,18 +265,18 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
             if (existingIndex >= 0 && existingIndex < _nominatedMaps.Count)
             {
                 var oldMap = _nominatedMaps[existingIndex];
-                _nominatedMaps[existingIndex] = mapName;
+                _nominatedMaps[existingIndex] = matchedMap;
                 
-                Server.PrintToChatAll($"{Config.ChatPrefix} {player.PlayerName} changed their nomination from {oldMap} to {mapName}.");
+                Server.PrintToChatAll($"{Config.ChatPrefix} {player.PlayerName} changed their nomination from {oldMap} to {matchedMap}.");
                 return;
             }
         }
 
         // Add new nomination
-        _nominatedMaps.Add(mapName);
+        _nominatedMaps.Add(matchedMap);
         _nominatedBy.Add(playerSlot);
         
-        Server.PrintToChatAll($"{Config.ChatPrefix} {player.PlayerName} nominated {mapName}.");
+        Server.PrintToChatAll($"{Config.ChatPrefix} {player.PlayerName} nominated {matchedMap}.");
     }
 
     public void OnRtvCommand(CCSPlayerController? player, CommandInfo commandInfo)
@@ -330,8 +284,28 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
         if (player == null || !player.IsValid)
             return;
 
-        // RTV functionality would be implemented here
-        player.PrintToChat($"{Config.ChatPrefix} Rock the Vote functionality coming soon!");
+        if (_voteInProgress)
+        {
+            player.PrintToChat($"{Config.ChatPrefix} A vote is already in progress.");
+            return;
+        }
+
+        if (_mapVoteCompleted)
+        {
+            player.PrintToChat($"{Config.ChatPrefix} Map vote has already completed for this map.");
+            return;
+        }
+
+        var connectedPlayers = Utilities.GetPlayers().Count(p => p.IsValid && !p.IsBot);
+        if (connectedPlayers < Config.MinPlayersForRTV)
+        {
+            player.PrintToChat($"{Config.ChatPrefix} At least {Config.MinPlayersForRTV} players needed for RTV.");
+            return;
+        }
+
+        // For simplicity, start the vote immediately
+        // In a more complete implementation, you'd track RTV votes
+        StartMapVote();
     }
 
     public void OnNextMapCommand(CCSPlayerController? player, CommandInfo commandInfo)
@@ -339,12 +313,7 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
         if (player == null || !player.IsValid)
             return;
 
-        var nextMap = "";
-        // In CounterStrikeSharp, we'd need to access this differently
-        // For now, return a placeholder
-        if (string.IsNullOrEmpty(nextMap))
-            nextMap = "Not set";
-            
+        var nextMap = "Not set";
         player.PrintToChat($"{Config.ChatPrefix} Next map: {nextMap}");
     }
 
@@ -368,7 +337,23 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
     private void OnMapEnd()
     {
         _voteTimer?.Kill();
-        _retryTimer?.Kill();
+    }
+
+    private void OnClientDisconnect(int playerSlot)
+    {
+        // Remove nominations from disconnected player
+        for (int i = _nominatedBy.Count - 1; i >= 0; i--)
+        {
+            if (_nominatedBy[i] == playerSlot)
+            {
+                var removedMap = _nominatedMaps[i];
+                _nominatedMaps.RemoveAt(i);
+                _nominatedBy.RemoveAt(i);
+                
+                Server.PrintToChatAll($"{Config.ChatPrefix} Nomination for {removedMap} removed (player disconnected).");
+                break;
+            }
+        }
     }
 
     private void CheckMapVoteStart()
@@ -406,27 +391,23 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
             EndVote();
         });
         
-        Server.PrintToChatAll($"{Config.ChatPrefix} Map vote started! Type !vote to participate.");
+        Server.PrintToChatAll($"{Config.ChatPrefix} Map vote started! Use the menu to vote.");
     }
 
     private void CreateVoteMenu()
     {
         _voteMenu = new ChatMenu("Map Vote");
         
+        var mapsToInclude = new List<string>();
+        
         // Add nominated maps first
-        foreach (var map in _nominatedMaps.Take(Config.IncludeMaps))
-        {
-            _voteMenu.AddMenuOption(map, (player, option) =>
-            {
-                VoteForMap(player, map);
-            });
-        }
+        mapsToInclude.AddRange(_nominatedMaps.Take(Config.IncludeMaps));
         
         // Fill remaining slots with random maps
-        var remainingSlots = Config.IncludeMaps - _nominatedMaps.Count;
+        var remainingSlots = Config.IncludeMaps - mapsToInclude.Count;
         if (remainingSlots > 0)
         {
-            var availableMaps = _mapList.Where(m => !_nominatedMaps.Contains(m) && !_excludedMaps.Contains(m)).ToList();
+            var availableMaps = _mapList.Where(m => !mapsToInclude.Contains(m) && !_excludedMaps.Contains(m)).ToList();
             var random = new Random();
             
             for (int i = 0; i < remainingSlots && availableMaps.Any(); i++)
@@ -434,12 +415,17 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
                 var randomIndex = random.Next(availableMaps.Count);
                 var randomMap = availableMaps[randomIndex];
                 availableMaps.RemoveAt(randomIndex);
-                
-                _voteMenu.AddMenuOption(randomMap, (player, option) =>
-                {
-                    VoteForMap(player, randomMap);
-                });
+                mapsToInclude.Add(randomMap);
             }
+        }
+        
+        // Add maps to menu
+        foreach (var map in mapsToInclude)
+        {
+            _voteMenu.AddMenuOption(map, (player, option) =>
+            {
+                VoteForMap(player, map);
+            });
         }
         
         // Add extend option if enabled
@@ -544,13 +530,11 @@ public class SurfTimerMapchooser : BasePlugin, IPluginConfig<MapchooserConfig>
 public class MapchooserConfig : BasePluginConfig
 {
     public string DatabaseHost { get; set; } = "localhost";
-    public string DatabaseName { get; set; } = "surftimer";
-    public string DatabaseUser { get; set; } = "surftimer";
+    public string DatabaseName { get; set; } = "database";
+    public string DatabaseUser { get; set; } = "user";
     public string DatabasePassword { get; set; } = "password";
     public int DatabasePort { get; set; } = 3306;
     
-    public int ServerTier { get; set; } = 0;
-    public int ServerTierMax { get; set; } = 0;
     public int StartTime { get; set; } = 10;
     public int IncludeMaps { get; set; } = 5;
     public int ExcludeMaps { get; set; } = 3;
@@ -558,9 +542,7 @@ public class MapchooserConfig : BasePluginConfig
     public int MaxExtends { get; set; } = 2;
     public int ExtendTimeStep { get; set; } = 15;
     public int VoteDuration { get; set; } = 30;
-    public int PointsRequirement { get; set; } = 0;
-    public int RankRequirement { get; set; } = 0;
-    public bool VipOverwriteRequirements { get; set; } = true;
+    public int MinPlayersForRTV { get; set; } = 2;
     
     public string ChatPrefix { get; set; } = "[MapChooser]";
 }
